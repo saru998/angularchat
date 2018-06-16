@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.0/css/bootstrap.min.css" integrity="sha384-9gVQ4dYFwwWSjIDZnLEWnxCjeSWFphJiwGPXr1jddIhOegiu1FwO5qRGvFXOdJZ4" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.1.0.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://js.pusher.com/4.0/pusher.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>WannaChat</title>
+    <style>
+       #messageArea{
+           display: none;
+       }
+    </style>
+</head>
+<body id="bottombody">   
+    <nav class="navbar fixed-top navbar-light bg-light">
+        <a class="navbar-brand" href="#">WannaChat</a>
+        <span class="nav-text"><em id="user-is-typing"></em></span>
+        
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="false" aria-expanded="true">
+                <span class="nav-text" id="userdetail">0</span>
+            </button>
+            <div class="dropdown-menu dropdown-menu-right">
+              <div id="user"></div>
+            </div>
+          </div>
+        
+    </nav>
+
+    <br>
+
+
+    <div style="padding: 50px;" class="container">
+        <div id="userFormArea" class="row">
+            <div class="col-md-12">
+                <form id="userForm">
+                    <div class="form-group">
+                            <div style="padding: 50px;" class="container">  
+                                    <div class="input-group mb-3">
+                                        <input type="text" id="username" class="form-control" placeholder="Enter your name with which you will chat" aria-label="Recipient's username" aria-describedby="basic-addon2" required>
+                                        <div class="input-group-append">
+                                          <button class="btn btn-outline-secondary" type="submit">Go</button>
+                                        </div>
+                                    </div>
+                            </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div id="messageArea" class="row">
+            <div class="col-md-4">
+                <div class="well">
+                    
+                    <h4><span id="online"></span></h4>
+                    <ul class="list-group" id="users"></ul>
+                    <!-- <div class="is_typing">
+                            <em id="user-is-typing"></em>
+                    </div> -->
+                </div>
+            </div>
+            <div class="col-md-8">
+                
+                <ul class="list-group list-group-flush"><span class="chat" id="chat"></span></ul>
+                <form id="messageForm">
+                    <div class="form-group">
+                        
+                        
+                        <div class="input-group mb-3">
+                                
+                                <input type="text" id="message" class="form-control" placeholder="Enter message"  aria-describedby="basic-addon2" required autocomplete="off"
+                                <div class="input-group-append">
+                                  <button class="btn btn-outline-secondary" type="submit">Send</button>
+                                </div>
+                        </div>
+
+
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    var usercount=0;
+        $(function(){
+            var socket = io.connect();
+            var $messageForm = $('#messageForm');
+            var $message= $('#message');
+            var $chat = $('#chat');
+            var $messageArea=$('#messageArea');
+            var $userFormArea=$('#userFormArea');
+            var $userForm=$('#userForm');
+            var $user=$('#user');
+            var $username=$('#username');
+            
+
+            $messageForm.submit(function(e){
+                e.preventDefault();
+                socket.emit('send message',$message.val());
+                $message.val('');
+            });
+
+            socket.on('new message',function(data){
+                $chat.append('<li class="list-group-item"><strong>'+data.user+'</strong> : '+data.msg+'</li>');
+                var elem = document.getElementById('bottombody');
+                elem.scrollTop = elem.scrollHeight;
+                
+                $(document).ready(function(){
+                $('body,html').animate({scrollTop: elem.scrollHeight}, 3000); 
+                });
+            });
+
+            $userForm.submit(function(e){
+                e.preventDefault();
+                $("#online").html("Hello "+$username.val()+" ,say hi");
+                document.title = 'WannaChat : '+$username.val();
+
+                socket.emit('new user',$username.val(),function(data){
+                        if(data){
+                            
+                            $userFormArea.hide();
+                            $messageArea.show();
+                        }
+                });
+                
+                //$username.val('');
+            });
+
+            socket.on('get users',function(usercount,data2){
+                //Array.prototype.length(data2);
+                var html='';
+                data2.forEach(element => {
+                    html+='<button class="dropdown-item" type="button">'+element+'</button>';
+                });
+    
+                $user.html(html);
+                document.getElementById('userdetail').innerText=usercount;
+                
+            })
+            
+
+             var pusher = new Pusher('7a6b33481def879fce8e', {
+      cluster: 'ap2',
+      encrypted: true
+    });
+
+    var chatChannelName = 'anonymous_chat';
+    var userIsTypingEvent = 'user_typing';
+    
+
+    var messageTextField = $('#message');
+    var canPublish = true;
+    var throttleTime = 2000; //0.2 seconds
+
+    messageTextField.on('keyup', function(event) {
+    if(canPublish) {
+        
+        $.post('/userTyping', {username: $username.val() });
+
+        canPublish = false;
+        setTimeout(function() {
+        canPublish = true;
+        }, throttleTime);
+        
+    }
+    });
+    
+    if(true){
+        var channel = pusher.subscribe(chatChannelName);
+        var clearInterval = 2000; //0.9 seconds
+        var clearTimerId;
+
+        channel.bind(userIsTypingEvent, function(data) {
+        if(data.username !== $username.val()) {
+            
+            $('#user-is-typing').html(data.username + ' is typing...');
+
+            //restart timeout timer
+            clearTimeout(clearTimerId);
+            clearTimerId = setTimeout(function () {
+            //clear user is typing message
+            $('#user-is-typing').html('');
+            }, clearInterval);
+        }
+        });
+    }
+
+   
+});    
+
+    
+    
+   
+   
+
+    </script>
+<div style="position:fixed;bottom:4px;width:100%;height:20px;opacity:.3;text-align: center">Designed by Saransh</div>
+</body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+</html>
